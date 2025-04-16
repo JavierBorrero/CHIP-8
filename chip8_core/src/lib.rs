@@ -270,8 +270,51 @@ impl Emu {
              * an if-else block. We can make a comparison, and if true go to one instruction, and
              * if false go somewhere else. This is also the first opcode which will use one of our
              * `V` registers. In this case, the second digit tells us which register to use, while
-             * the last two digits provide the raw value
+             * the last two digits provide the raw value.
+             *
+             * The implementation works like this: Since we already have the second digit saved to
+             * a variable, we will reuse it for our 'X' index, although cast to a `usize`, as Rust
+             * requires all array index to be done with a `usize` variable. If that value stored in
+             * that register equals `nn`, then we skip the next opcode, which is the same as
+             * skipping our PC ahead by two bytes
              */
+            (3, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (op & 0xFF) as u8;
+                if self.v_reg[x] == nn {
+                    self.pc += 2;
+                }
+            },
+
+            /*
+             * 4XNN - Skip next if VX != NN
+             *
+             * This opcode is exactly the same as the previous, except we skip if the compared
+             * values are not equal
+             */
+            (4, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (op & 0xFF) as u8;
+                if self.v_reg[x] != nn {
+                    self.pc += 2
+                }
+            },
+
+            /*
+             * 5XY0 - Skip next if VX == VY
+             *
+             * A similar operation again, however we now use the third digit to index into another
+             * V Register. You will also notice that the last significant digit is not used in the
+             * operation. This opcode requires it to be 0
+             */
+            (5, _, _, 0) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+                if self.v_reg[x] == self.v_reg[y] {
+                    self.pc += 2;
+                }
+            },
+
             (_, _, _, _) => unimplemented!("Uninplemented opcode: {}", op),
         }
     }
