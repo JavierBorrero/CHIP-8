@@ -8,25 +8,6 @@ const NUM_KEYS: usize = 16;
 const START_ADDR: u16 = 0x200;
 const FONT_SIZE: usize = 80;
 
-const FONTSET: [u8; FONT_SIZE] = [
-    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
-    0x20, 0x60, 0x20, 0x20, 0x70, // 1
-    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
-    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
-    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
-    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
-    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
-    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
-    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
-    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
-    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
-    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
-    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
-    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
-    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
-];
-
 /*
  * The CHIP-8 screen display renders sprites which are stored in memory to the
  * screen, one line at a time. It is up to the gamedev to correctly load their sprites
@@ -50,6 +31,25 @@ const FONTSET: [u8; FONT_SIZE] = [
  * Every sprite in CHIP-8 is eight pixels wide, which means a pixel row requires 8-bits (1 byte).
  * The above diagram shows the layour of the "1" character sprite
  */
+
+const FONTSET: [u8; FONT_SIZE] = [
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+];
 
 pub struct Emu {
     pc: u16, // program counter
@@ -195,7 +195,7 @@ impl Emu {
          */
         match (digit1, digit2, digit3, digit4) {
             /*
-             * 0000 - NOP
+             * // 0000 // | NOP
              *
              * No opcode. Do nothing. This may seem a silly one, but sometimes it's needed for
              * timing or alignment purposes.
@@ -212,7 +212,7 @@ impl Emu {
             }
 
             /*
-             * 00EE - Return from Subroutine
+             * // 00EE // | Return from Subroutine
              *
              * We haven`t yet spoken about subroutines (aka functions) and how they work. Entering
              * into a subroutine works in the same way as a plain jump: We move the PC to the
@@ -230,7 +230,7 @@ impl Emu {
             }
 
             /*
-             * 1NNN - Jump
+             * // 1NNN // | Jump
              *
              * The jump instruction is easy to add, simply move the PC to the given address. The
              * main thing to notice here is that this opcode is defined by `0x1` being the most
@@ -251,7 +251,7 @@ impl Emu {
             }
 
             /*
-             * 2NNN - Call Subroutine
+             * // 2NNN // | Call Subroutine
              *
              * The opposite of our 'Return from Subroutine' operation, we are going to add our
              * current PC to the stack, and then jump to the given address.
@@ -263,7 +263,7 @@ impl Emu {
             }
 
             /*
-             * 3XNN - Skip next if VX == NN
+             * // 3XNN // | Skip next if VX == NN
              *
              * This opcode is first of a few that follow a similar pattern. For those who are
              * unfamiliar with assembly, being able to skip a line gives similar functionallity to
@@ -284,10 +284,10 @@ impl Emu {
                 if self.v_reg[x] == nn {
                     self.pc += 2;
                 }
-            },
+            }
 
             /*
-             * 4XNN - Skip next if VX != NN
+             * // 4XNN // | Skip next if VX != NN
              *
              * This opcode is exactly the same as the previous, except we skip if the compared
              * values are not equal
@@ -298,10 +298,10 @@ impl Emu {
                 if self.v_reg[x] != nn {
                     self.pc += 2
                 }
-            },
+            }
 
             /*
-             * 5XY0 - Skip next if VX == VY
+             * // 5XY0 // | Skip next if VX == VY
              *
              * A similar operation again, however we now use the third digit to index into another
              * V Register. You will also notice that the last significant digit is not used in the
@@ -313,8 +313,47 @@ impl Emu {
                 if self.v_reg[x] == self.v_reg[y] {
                     self.pc += 2;
                 }
-            },
+            }
 
+            /*
+             * // 6XNN // | VX = NN
+             *
+             * Set the V Register specified by the second digit to the value given
+             */
+            (6, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (op & 0xFF) as u8;
+                self.v_reg[x] = nn;
+            }
+
+            /*
+             * // 7XNN // | VX += NN
+             *
+             * This operation adds the given value to the VX Register. In the event of an overflow,
+             * Rust will panic, so we need to use a different method than the typical addition
+             * operator. Note also that while CHIP-8 has a carry flag, it is not modified by this
+             * operation.
+             */
+            (7, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (op & 0xFF) as u8;
+                self.v_reg[x] = self.v_reg[x].wrapping_add(nn);
+            }
+
+            /*
+             * // 8XY0 // | VX = VY
+             *
+             * Like the `VX = NN` operation, but the source value is from the VY register
+             */
+            (8, _, _, _) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+                self.v_reg[x] = self.v_reg[y];
+            }
+
+            /*
+             *
+             */
             (_, _, _, _) => unimplemented!("Uninplemented opcode: {}", op),
         }
     }
