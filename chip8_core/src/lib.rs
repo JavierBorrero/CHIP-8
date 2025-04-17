@@ -341,9 +341,65 @@ impl Emu {
             }
 
             /*
+             * // 8XY1 // | Bitwise operation OR
+             */
+            (8, _, _, 1) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+                self.v_reg[x] |= self.v_reg[y];
+            }
+
+            /*
+             * // 8XY2 // | Bitwise operation AND
+             */
+            (8, _, _, 2) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+                self.v_reg[x] &= self.v_reg[y];
+            }
+
+            /*
+             * // 8XY3 // | Bitwise operation XOR
+             */
+            (8, _, _, 3) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+                self.v_reg[x] ^= self.v_reg[y];
+            }
+
+            /*
+             * // 8XY4 // | VX += VY
+             *
+             * This operation has two aspects to make note of. Firstly, this operation has the
+             * potential to overflow, which will cause a panic in Rust if not handled correctly.
+             * Secondly, this operation is the first to utilize `VF` flag register. I've touched
+             * upon it previously, but while the first 15V registers are general usage, the final
+             * 16th (0xF) register doubles as the flag register. Flag registers are common in many
+             * CPU processors. In the case of CHIP-8 it also stores the carry flag, basically a
+             * special variable that notes if the last application operation resulted in an
+             * overflow/underflow. Here, if an overflow were to happen, we need to set the `VF` to
+             * be 1, or 0 if not. With these two aspects in mind, we will use Rust's
+             * `overflowing_add` attribute, which will return a tuple of both the wrapped sum, as
+             * well as a boolean of wether an overflow occured.
+             */
+            (8, _, _, 4) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                let (new_vx, carry) = self.v_reg[x].overflowing_add(self.v_reg[y]);
+                let new_vf = if carry { 1 } else { 0 };
+
+                self.v_reg[x] = new_vx;
+                self.v_reg[0xF] = new_vf;
+            }
+
+            /*
              * // 8XY0 // | VX = VY
              *
              * Like the `VX = NN` operation, but the source value is from the VY register
+             *
+             * Si esta instruccion va primero salta un warning de unreachable code para el resto de
+             * opcodes
              */
             (8, _, _, _) => {
                 let x = digit2 as usize;
@@ -351,9 +407,6 @@ impl Emu {
                 self.v_reg[x] = self.v_reg[y];
             }
 
-            /*
-             *
-             */
             (_, _, _, _) => unimplemented!("Uninplemented opcode: {}", op),
         }
     }
