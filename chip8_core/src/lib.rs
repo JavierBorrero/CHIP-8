@@ -420,6 +420,12 @@ impl Emu {
              *  was dropped off being stored into the `VF` register. Unfortunately, there isn't a
              *  built-in Rust `u8` operator to catch the dropped bit, so we will have to do it
              *  ourself.
+             *
+             *  lsb = AND bit a bit con 1, que da 1 si el ultimo bit es 1, y 0 si el ultimo bit es
+             *  0.
+             *
+             *  self.v_reg[x] >>= 1 -> todos los bits se mueven una posicion a la derecha, y el bit
+             *  mas significativo se rellena con 0.
              */
             (8, _, _, 6) => {
                 let x = digit2 as usize;
@@ -443,6 +449,59 @@ impl Emu {
 
                 self.v_reg[x] = new_vx;
                 self.v_reg[0xF] = new_vf;
+            }
+
+            /*
+             *  // 8XYE // | VX <<= 1
+             *
+             *  Similar to the right shift operation, but we store the value that is overflowed in
+             *  the flag register.
+             *
+             *  msb:
+             *  (>> 7) mueve el bit mas significativo hasta la posicion 0
+             *  (& 1) asegura que solo nos quedamos con ese bit, descartando los demas
+             *
+             *  ejemplo: self.v_reg[x] = 1010_0001:
+             *
+             *  self.v_reg[x] >> 7 = 0000_0001. & 1 da 1, que es lo que queremos almacenar como
+             *  flag en `VF`
+             *
+             *  self.v_reg[x] <<= 1: Mueve todos los bits una posicion a la izquierda, y el bit
+             *  menos significativo se convierte en 0. El bit mas significativo se pierde (que es
+             *  el que guardamos antes en msb)
+             */
+            (8, _, _, 0xE) => {
+                let x = digit2 as usize;
+                let msb = (self.v_reg[x] >> 7) & 1;
+                self.v_reg[x] <<= 1;
+                self.v_reg[0xF] = msb;
+            }
+
+            /*
+             *  // 9XY0 // | Skip if VX != VY
+             *
+             *  Skip the next line if VX != VY. This is the same code as the 5XY0 operation, but
+             *  with an inequality
+             */
+            (9, _, _, 0) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                if self.v_reg[x] != self.v_reg[y] {
+                    self.pc += 2;
+                }
+            }
+
+            /*
+             * // ANNN // | I = NNN
+             *
+             * This is the first instruction to utilize the I Register, which will be used in
+             * several additional instructions, primarily as an address pointer to RAM. In this
+             * case, we are simply setting it to the 0xNNN value encodede in this opcode
+             */
+            (0xA, _, _, _) => {
+                let nnn = op & 0xFFF;
+                self.i_reg = nnn;
             }
 
             /*
