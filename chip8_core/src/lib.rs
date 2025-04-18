@@ -1,3 +1,7 @@
+use std::usize;
+
+use rand::random;
+
 pub const SCREEN_WIDTH: usize = 64;
 pub const SCREEN_HEIGHT: usize = 32;
 
@@ -478,6 +482,20 @@ impl Emu {
             }
 
             /*
+             * // 8XY0 // | VX = VY
+             *
+             * Like the `VX = NN` operation, but the source value is from the VY register
+             *
+             * Si esta instruccion va primero salta un warning de unreachable code para el resto de
+             * opcodes
+             */
+            (8, _, _, _) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+                self.v_reg[x] = self.v_reg[y];
+            }
+
+            /*
              *  // 9XY0 // | Skip if VX != VY
              *
              *  Skip the next line if VX != VY. This is the same code as the 5XY0 operation, but
@@ -505,17 +523,123 @@ impl Emu {
             }
 
             /*
-             * // 8XY0 // | VX = VY
+             *  // BNNN // | Jump to V0 + NNN
              *
-             * Like the `VX = NN` operation, but the source value is from the VY register
-             *
-             * Si esta instruccion va primero salta un warning de unreachable code para el resto de
-             * opcodes
+             *  While previous instructions have used the V Register specified within the opcode,
+             *  this instruction always uses the first V0 Register. This operations moves the PC to
+             *  the sum of the value stored in V0 and the raw value 0xNNN supplied in the opcode.
              */
-            (8, _, _, _) => {
+            (0xB, _, _, _) => {
+                let nnn = op & 0xFFF;
+                self.pc = (self.v_reg[0] as u16) + nnn;
+            }
+
+            /*
+             *  // CXNN // | VX = rand() & NN
+             *
+             *  This opcode is CHIP-8's random number generation, with a slight twist, in that the
+             *  random number is then AND'd with the lower 8-bits of the opcode. Install rand crate
+             *  in your project to implement this opcode.
+             */
+            (0xC, _, _, _) => {
                 let x = digit2 as usize;
-                let y = digit3 as usize;
-                self.v_reg[x] = self.v_reg[y];
+                let nn = (op & 0xFF) as u8;
+                let rng: u8 = random();
+                self.v_reg[x] = rng & nn;
+            }
+
+            /*
+             *  // DXYN // | Draw Sprite
+             *
+             *  This is probably the single most complicated opcode. Rather than drawing individual
+             *  pixels or rectangles to the screen at a time, the CHIP-8 display works by drawing
+             *  sprites, images stored in memory that are copied to the screen at a specified (x,
+             *  y) coordinates from. So far so good.
+             *
+             *  CHIP8's sprites are always 8 pixels wide, but can be a variable number of pixels
+             *  tall, from 1 to 16. This is specified in the final digit of our opcode. I mentioned
+             *  earlier that the `I Register` is used frequently to store an address in memory, and
+             *  this is the case here. Our sprites are stored row by row beginning at the address
+             *  stored in `I`.
+             *
+             *  So if we are told to draw a 3px tall sprite, the first row's data is stored at *I
+             *  followed by *I + 1, then *I + 2. This explains why all sprites are 8 pixels wide,
+             *  each row is assigned a byte, which is 8-bits, one for each pixel, black or white.
+             *  The last detail to note if that is any is flipped from white to black or vice
+             *  versa, the `VF` is set (and cleared otherwise). With these things in mind, let's
+             *  begin.
+             *
+             */
+            (0xD, _, _, _) => {
+                // Get the (x,y) coords for our sprite
+                let x_coord = self.v_reg[digit2 as usize] as u16;
+                let y_coord = self.v_reg[digit3 as usize] as u16;
+
+                // The last digit determines how many rows high our sprite is
+                let num_rows = digit4;
+
+                // Keep track if any pixel is flipped
+                let mut flipped = false;
+
+                // Iterate over each ROW of our sprite
+                for y_line in 0..num_rows {
+                    // Determine which memory address our row's data is stored
+                    let addr = self.i_reg + y_line as u16;
+                    let pixels = self.ram[addr as usize];
+
+                    // Iterate over each COLUMN in our row
+                    for x_line in 0..8 {
+                        // Use a mask to fetch current pixel's bit. Only flip if a 1
+                        if (pixels & (0b1000_0000 >> x_line)) != 0 {
+                            // Sprites should wrap around screen, so apply modulo
+                            let x = (x_coord + x_line) as usize % SCREEN_WIDTH;
+                            let y = (y_coord + y_line) as usize % SCREEN_HEIGHT;
+
+                            // Get our pixel's index for our 1D screen array
+                            let idx = x + SCREEN_WIDTH * y;
+                            // Check if we're about to flip the pixel and set
+                            flipped |= self.screen[idx];
+                            self.screen[idx] ^= true;
+                        }
+                    }
+                }
+
+                if flipped {
+                    self.v_reg[0xF] = 1;
+                } else {
+                    self.v_reg[0xF] = 0;
+                }
+            }
+
+            /*
+             *  // EX9E // | Skip if Key Pressed
+             *
+             *  Time at last to introduce user input. When setting up our emulator object, I
+             *  mentioned that there are 16 possible keys numbered 0 to 0xF. This instruction
+             *  checks if the index stored in VX is pressed, and if so, skips the next instruction.
+             */
+            (0xE, _, 9, 0xE) => {
+                let x = digit2 as usize;
+                let vx = self.v_reg[x];
+                let key = self.keys[vx as usize];
+                if key {
+                    self.pc += 2;
+                }
+            }
+
+            /*
+             *  // EXA1 // | Skip if Key Not Pressed
+             *
+             *  Same as the previous instruction, however this time the next instruction is skipped
+             *  if the key in question is not being pressed
+             */
+            (0xE, _, 0xA, 1) => {
+                let x = digit2 as usize;
+                let vx = self.v_reg[x];
+                let key = self.keys[vx as usize];
+                if !key {
+                    self.pc += 2;
+                }
             }
 
             (_, _, _, _) => unimplemented!("Uninplemented opcode: {}", op),
