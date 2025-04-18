@@ -394,6 +394,58 @@ impl Emu {
             }
 
             /*
+             * // 8XY5 // | VX -= VY
+             *
+             * Same operation as the previous op, but with subtraction rather than addition. The
+             * key distinction is that the `VF` carry flag works in the opposite fashion. The
+             * addition operation would set the flag to 1 if an overflow occurred, here if an
+             * underflow occurs, it is set to 0, and vice versa. The `overflowing_sub` method will
+             * be of use to us here.
+             */
+            (8, _, _, 5) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                let (new_vx, borrow) = self.v_reg[x].overflowing_sub(self.v_reg[y]);
+                let new_vf = if borrow { 0 } else { 1 };
+
+                self.v_reg[x] = new_vx;
+                self.v_reg[0xF] = new_vf;
+            }
+
+            /*
+             *  // 8XY6 // | VX >>= 1
+             *
+             *  This operation performs a single right shift on the value in VX, with the bit that
+             *  was dropped off being stored into the `VF` register. Unfortunately, there isn't a
+             *  built-in Rust `u8` operator to catch the dropped bit, so we will have to do it
+             *  ourself.
+             */
+            (8, _, _, 6) => {
+                let x = digit2 as usize;
+                let lsb = self.v_reg[x] & 1;
+                self.v_reg[x] >>= 1;
+                self.v_reg[0xF] = lsb;
+            }
+
+            /*
+             *  // 8XY7 // | VX = VY - VX
+             *
+             *  This operation works the same as the previous VX -= VY, but with the operands in
+             *  the opposite direction
+             */
+            (8, _, _, 7) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                let (new_vx, borrow) = self.v_reg[y].overflowing_sub(self.v_reg[x]);
+                let new_vf = if borrow { 0 } else { 1 };
+
+                self.v_reg[x] = new_vx;
+                self.v_reg[0xF] = new_vf;
+            }
+
+            /*
              * // 8XY0 // | VX = VY
              *
              * Like the `VX = NN` operation, but the source value is from the VY register
