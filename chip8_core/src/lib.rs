@@ -642,6 +642,76 @@ impl Emu {
                 }
             }
 
+            /*
+             *  // FX07 // | VX = DT
+             *
+             * The Delay Timer ticks down every frame until reaching zero. However, that operation
+             * happens automatically, it would be really useful to be able to actually see what's
+             * in the Delay Timer for our game's timing purposes. This instruction does just that,
+             * and stores the current value into one of the `V` Registers for us to use
+             */
+            (0xF, _, 0, 7) => {
+                let x = digit2 as usize;
+                self.v_reg[x] = self.dt;
+            }
+
+            /*
+             *  // FX0A // | Wait for Key Press
+             *
+             *  While we already had instructions to check if keys are either pressed or released,
+             *  this instruction does something very different. Unlike those, which checked the key
+             *  state and then moved on, this instruction is blocking, meaning the whole game will
+             *  pause and wait for as long as it needs to until the player presses a key. That
+             *  means it needs to loop endlessly until something in our `keys` arrays turns true.
+             *  Once a key is found, is stored into VX. If more than one key is currently being
+             *  pressed, it takes the lowest indexed one.
+             *
+             *  "Why are we resetting the opcode and going through the entire fetch sequence again,
+             *  rather than simply doing this in a loop?". Simply put, while we want this
+             *  instruction to block future instructions from running, we do not want to block any
+             *  new keypresses from being registered. By remaining in a loop, we would prevent our
+             *  key press code from ever running, causing this loop to never end. Perharps
+             *  inefficient, but much simpler  than some sort of asynchronous checking.
+             */
+            (0xF, _, 0, 0xA) => {
+                let x = digit2 as usize;
+                let mut pressed = false;
+                for i in 0..self.keys.len() {
+                    if self.keys[i] {
+                        self.v_reg[x] = i as u8;
+                        pressed = true;
+                        break;
+                    }
+                }
+                if !pressed {
+                    // Redo opcode
+                    self.pc -= 2;
+                }
+            }
+
+            /*
+             *  // FX15 // | DT = VX
+             *
+             *  This operation works the other direction from our previous Delay Timer instruction.
+             *  We need someway to reset the Delay Timer to a value, and this instrucction allows
+             *  us to copy over a value from a `V Register` of our choosing.
+             */
+            (0xF, _, 1, 5) => {
+                let x = digit2 as usize;
+                self.dt = self.v_reg[x];
+            }
+
+            /*
+             *  // FX18 // | ST = VX
+             *
+             *  Almost the same exact same instruction as the previous, however this time we are
+             *  going to store the value from VX into our `Sound Timer`.
+             */
+            (0xF, _, 1, 8) => {
+                let x = digit2 as usize;
+                self.st = self.v_reg[x];
+            }
+
             (_, _, _, _) => unimplemented!("Uninplemented opcode: {}", op),
         }
     }
