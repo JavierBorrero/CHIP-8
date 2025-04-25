@@ -802,6 +802,33 @@ impl Emu {
                 self.ram[(self.i_reg + 2) as usize] = ones;
             }
 
+            /*
+             *  // FX55 // | Store V0 - VX into I
+             *
+             *  These final two instructions populate our V Registers V0 through the specified VX
+             *  (inclusive) with the same range of values from RAM, beginning with the address in
+             *  the I Register. This first one stores the values into RAM, while the next one will
+             *  load them the opposite way
+             */
+            (0xF, _, 5, 5) => {
+                let x = digit2 as usize;
+                let i = self.i_reg as usize;
+                for idx in 0..=x {
+                    self.ram[i + idx] = self.v_reg[idx];
+                }
+            }
+
+            /*
+             *  // FX65 // | Load I into V0 - VX
+             */
+            (0xF, _, 6, 5) => {
+                let x = digit2 as usize;
+                let i = self.i_reg as usize;
+                for idx in 0..=x {
+                    self.v_reg[idx] = self.ram[i + idx];
+                }
+            }
+
             (_, _, _, _) => unimplemented!("Uninplemented opcode: {}", op),
         }
     }
