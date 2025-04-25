@@ -712,6 +712,96 @@ impl Emu {
                 self.st = self.v_reg[x];
             }
 
+            /*
+             *  // FX1E // | I += VX
+             *
+             *  Instruction ANNN sets I to the encoded 0xNNN value, but sometimes it is useful to
+             *  be able to simply increment the value. This instruction takes the value stored in
+             *  VX and adds it to the `I Register`. In the case of an overflow, the register should
+             *  simply roll over back to 0, which we can accomplish with Rust's `wrapping_add`
+             *  method.
+             */
+            (0xF, _, 1, 0xE) => {
+                let x = digit2 as usize;
+                let vx = self.v_reg[x] as u16;
+                self.i_reg = self.i_reg.wrapping_add(vx);
+            }
+
+            /*
+             *  // FX29 // | Set I to Font Address
+             *
+             *  This is another tricky instruction where it may not be clear how to progress at
+             *  first. If you recall, we stored an array of font data at the very beginning of RAM
+             *  when initializing the emulator. This instruction wants us to take from VX a number
+             *  to print on the screen (from 0 to 0xF), and store the RAM address of that sprite
+             *  into the I Register. We are actually free to store those sprites anywhere we
+             *  wanted, so long as we are consistent and point to them correctly here. However, we
+             *  stored them in a very convenient location, at the beginning of RAM. Let me show you
+             *  what I mean by printing out some of the sprites and their RAM locations.
+             *
+             *  Character | RAM Address
+             *  0           0
+             *  1           5
+             *  2           10
+             *  3           15
+             *  ...         ...
+             *  E(14)       70
+             *  F(15)       75
+             *
+             *  You'll notice that since all of our font sprites take up five bytes each, their RAM
+             *  address is simply their value times 5. If we happened to store the fonts in a
+             *  different RAM address, we could still follow this rule, however we'd have to apply
+             *  an offset to where the block begins
+             */
+            (0xF, _, 2, 9) => {
+                let x = digit2 as usize;
+                let c = self.v_reg[x] as u16;
+                self.i_reg = c * 5;
+            }
+
+            /*
+             *  // FX33 // | BCD of VX
+             *
+             *  Most of the instructions for CHIP-8 are rather self-explanitory, and can be
+             *  implemented quite easily just by hearing a vague description. However, there are a
+             *  few that are quite tricky, such as drawing to a screen and this one, storing the
+             *  Binary-Coded Decimal of a number stored in VX into I Register.
+             *
+             *  In this tutorial we've been using hexadecimal quite a bit, which works by
+             *  converting our normal decimal numbers into base-16, which is more easily understood
+             *  by computers. For example, the decimal number 100 would become 0x64. This is good
+             *  for computers, but not very accesible to humans, and certainly not to the general
+             *  audience who are going to play our games.
+             *
+             *  The main purpose of BCD is to convert a hexadecimal number back into a
+             *  pseudo-decimal number to print out for the user, such as for your points or high
+             *  scores. So while CHIP-8 might store 0x64 internally, fetching its BCD would give us
+             *  `0x1, 0x0, 0x0`, which we could print to the screen has "100".
+             *
+             *  You'll notice that we've gone from one byte to three in order to store all three
+             *  digits of our number, which is why we are going to store the BCD into RAM,
+             *  beginning at the address currently in the I Register and moving along. Given that
+             *  VX stores 8-bit numbers, which are range from 0 to 255, we are always going to end
+             *  up with three bytes, even if some are zero
+             */
+            (0xF, _, 3, 3) => {
+                let x = digit2 as usize;
+                let vx = self.v_reg[x] as f32;
+
+                // Fetch the hundreds digit by divigind by 100 and tossing the decimal
+                let hundreds = (vx / 100.0) as u8;
+
+                // Fetch the tens digit by dividing by 10, tossing the ones digit and the decimal
+                let tens = ((vx / 10.0) % 10.0).floor() as u8;
+
+                // Fetch the ones digit by tossing the hundreds and the tens
+                let ones = (vx % 10.0) as u8;
+
+                self.ram[self.i_reg as usize] = hundreds;
+                self.ram[(self.i_reg + 1) as usize] = tens;
+                self.ram[(self.i_reg + 2) as usize] = ones;
+            }
+
             (_, _, _, _) => unimplemented!("Uninplemented opcode: {}", op),
         }
     }
