@@ -153,6 +153,41 @@ impl Emu {
         self.ram[..FONT_SIZE].copy_from_slice(&FONTSET);
     }
 
+    // Pass a pointer to our screen buffer array up to the frontend, where it can be used to render
+    // to the display
+    pub fn get_display(&self) -> &[bool] {
+        &self.screen
+    }
+
+    /*
+     * We need to handle key presses. We already have a `keys` array, but it never actually gets
+     * written to. Our frontend will handle actually reading keyboard presses, but we'll need to
+     * expose a function that allows it to interface and set elements in our `keys` array.
+     *
+     * This function takes the index of the key that has been pressed and sets the value. Keep in
+     * mind that `idx` needs to be under 16 or else the program will panic. You can add that
+     * restriction here, but instead we'll handle it in the frontend and assume that it's been done
+     * correctly in the backend, rather than chhecking it twice.
+     */
+    pub fn keypress(&mut self, idx: usize, pressed: bool) {
+        self.keys[idx] = pressed;
+    }
+
+    /*
+     * We need some way to load the game code from a file into our RAM so it can be executed. We'll
+     * dive into this more deeply when we begin reading from a file in our frontend, but for now we
+     * need to take in a list of bytes and copy them into RAM
+     *
+     * This function copies all the values from our input `data` slice into RAM beginning at 0x200.
+     * Remember that the first 512 bytes of RAM aren't to contain game data, and are empty for the
+     * character sprite data we store there.
+     */
+    pub fn load(&mut self, data: &[u8]) {
+        let start = START_ADDR as usize;
+        let end = (START_ADDR as usize) + data.len();
+        self.ram[start..end].copy_from_slice(data);
+    }
+
     /*
      * How the CPU will process each instruction and move through the game:
      *
