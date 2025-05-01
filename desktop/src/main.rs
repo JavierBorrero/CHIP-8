@@ -1,6 +1,8 @@
 use chip8_core::*;
 use sdl2::event::Event;
 use std::env;
+use std::fs::File;
+use std::io::Read;
 
 /*
  * Inside `chip8_core`, we created public constants to hold the screen size, which we are now
@@ -54,7 +56,7 @@ fn main() {
      * loop if it need the window to close.
      *
      * This addition sets up our main game loop, which checks if any events have been triggered. If
-     * the `Quit` event is detected, then the program breaks out of the loop, causing it to end.
+     * the `Quit` event is detected, then the program breaks out of the loop.
      */
 
     let sdl_context = sdl2::init().unwrap();
@@ -72,6 +74,29 @@ fn main() {
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 
+    /*
+     * Creating the `Emu` object needs to go somewhere prior to our main game loop, as that is
+     * where the emulation drawing and key press handling will go.
+     */
+    let mut chip8 = Emu::new();
+
+    /*
+     * A few things to nothe here. In the event that Rust is unable to open the file from the path
+     * the user gaves then the `expect` condition will fail and the program will exit with that
+     * message.
+     */
+    let mut rom = File::open(&args[1]).expect("Unable to open file");
+    let mut buffer = Vec::new();
+
+    rom.read_to_end(&mut buffer).unwrap();
+    chip8.load(&buffer);
+
+    /*
+     * At this point the game has been loaded into RAM and our main loop is running. Now we need to
+     * tell our backend to begin processing its instructions, and to actually draw to the screen.
+     * If you recall, the emulator runs through a clock cycle each time its `tick` function is
+     * called, so let's add that to our loop.
+     */
     'gameloop: loop {
         for evt in event_pump.poll_iter() {
             match evt {
@@ -81,5 +106,6 @@ fn main() {
                 _ => (),
             }
         }
+        chip8.tick();
     }
 }
