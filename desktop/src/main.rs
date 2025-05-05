@@ -1,5 +1,10 @@
 use chip8_core::*;
 use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use sdl2::pixels::Color;
+use sdl2::rect::Rect;
+use sdl2::render::Canvas;
+use sdl2::video::Window;
 use std::env;
 use std::fs::File;
 use std::io::Read;
@@ -16,6 +21,7 @@ use std::io::Read;
 const SCALE: u32 = 15;
 const WINDOW_WIDTH: u32 = (SCREEN_WIDTH as u32) * SCALE;
 const WINDOW_HEIGHT: u32 = (SCREEN_HEIGHT as u32) * SCALE;
+const TICKS_PER_FRAME: usize = 10;
 
 fn main() {
     /*
@@ -103,9 +109,122 @@ fn main() {
                 Event::Quit { .. } => {
                     break 'gameloop;
                 }
+                /*
+                 * Each event will check if the pressed key gives a `Some` value from our `key2btn`
+                 * function, and if so pass it to the emulator via the public `keypress` function
+                 * we defined earlier. The only difference between the two will be if it sets or
+                 * clears
+                 */
+                Event::KeyDown {
+                    keycode: Some(key), ..
+                } => {
+                    if let Some(k) = key2btn(key) {
+                        chip8.keypress(k, true);
+                    }
+                }
+                Event::KeyUp {
+                    keycode: Some(key), ..
+                } => {
+                    if let Some(k) = key2btn(key) {
+                        chip8.keypress(k, false);
+                    }
+                }
                 _ => (),
             }
         }
-        chip8.tick();
+
+        /*
+         * The emulation `tick` speed should probably run faster than the canvas refresh rate. If
+         * you watch your game run, it might feel a bit sluggish. Right now, we execute one
+         * instruction, then draw to the screen, then repeat. As you're aware, it takes several
+         * instructions to be able to do any meaningful changes to the screen. To get around this,
+         * we will allow the emulator to tick several times before redrawing.
+         *
+         * The CHIP-8 specification says nothing about how quickly the system should actually run.
+         * Even leaving it is now so it runs at 60Hz is a valid solution. We'll simply allow our
+         * `tick` function to loop several times before moving on to drawing the screen.
+         * Personally, I find that 10 ticks per frame is a nice sweet spot
+         */
+        for _ in 0..TICKS_PER_FRAME {
+            chip8.tick();
+        }
+
+        /*
+         * If you run again, you might notice that it doesn't get very far before pausing. This is
+         * likely due to the fact that we never update our two timers, so the emulator has no
+         * concept of how long time has passed for its games. I mentioned earlier that the timers
+         * run once per frame, rather than at the clock speed, so we can modify the timers at the
+         * same point as when we modify the screen.
+         */
+        chip8.tick_timers();
+
+        draw_screen(&chip8, &mut canvas);
+    }
+}
+
+/*
+ * This function will take in a reference to our `Emu` object, as well as a mutable reference to
+ * our SDL canvas. Drawing the screen requires a few steps. First, we clear the canvas to erase the
+ * previous frame. Then, we iterate through the screen buffer, drawing a white rectangle anytime
+ * the given value is true. Sinche CHIP-8 only supports black and white, if we clear the screen as
+ * black, we only have to worry about drawing the white squares.
+ */
+fn draw_screen(emu: &Emu, canvas: &mut Canvas<Window>) {
+    // Clear canvas as black
+    canvas.set_draw_color(Color::RGB(0, 0, 0));
+    canvas.clear();
+
+    let screen_buf = emu.get_display();
+
+    // Now set draw color to white, iterate through each point and see if it should be drawn
+    canvas.set_draw_color(Color::RGB(255, 255, 255));
+
+    for (i, pixel) in screen_buf.iter().enumerate() {
+        if *pixel {
+            // Convert our 1D array's index into a 2D (x, y) position
+            let x = (i % SCREEN_WIDTH) as u32;
+            let y = (i / SCREEN_HEIGHT) as u32;
+
+            // Draw a rectable at (x, y), scaled up by our SCALE value
+            let rect = Rect::new((x * SCALE) as i32, (y * SCALE) as i32, SCALE, SCALE);
+            canvas.fill_rect(rect).unwrap();
+        }
+    }
+    canvas.present();
+}
+
+/*
+ * We can finally render our CHIP-8 game to the screen, but we can't get very far into playing it
+ * as we have no way to control it. Fortunately, SDL supports reading in inputs to the keyboard
+ * which we can translate and send to our backend emulation.
+ *
+ * The CHIP-8 system supports 16 different keys. These are typically organized in a 4x4 grid, with
+ * keys 0-9 organized like a telephone with keys A-F surrounding. While you are welcome to organize
+ * the keys in any configuration you like, some game devs assumed they're in the grid pattern when
+ * choosing their games inputs, which means it can be awkward to play some games otherwise. For our
+ * emulator, we'll use the left-hand keys of the QWERTY keyboard as our inputs, as shown below
+ *
+ * Let's create a function to convert SDL's key type into the values that we will send to the
+ * emulator. We'll need to bring SDL keyboard support.
+ */
+fn key2btn(key: Keycode) -> Option<usize> {
+    match key {
+        Keycode::Num1 => Some(0x1),
+        Keycode::Num2 => Some(0x2),
+        Keycode::Num3 => Some(0x3),
+        Keycode::Num4 => Some(0xC),
+        Keycode::Q => Some(0x4),
+        Keycode::W => Some(0x5),
+        Keycode::E => Some(0x6),
+        Keycode::R => Some(0xD),
+        Keycode::A => Some(0x7),
+        Keycode::S => Some(0x8),
+        Keycode::D => Some(0x9),
+        Keycode::F => Some(0xE),
+        Keycode::Z => Some(0xA),
+        Keycode::X => Some(0x0),
+        Keycode::C => Some(0xB),
+        Keycode::V => Some(0xF),
+        _ => None,
     }
 }
